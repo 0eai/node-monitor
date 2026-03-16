@@ -1,0 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: #0f1117;
+    --color-surface: #161b27;
+    --color-surface-2: #1e2a3d;
+    --color-border: rgba(255,255,255,0.06);
+    --color-text: #e2e8f0;
+    --color-text-dim: #94a3b8;
+    --color-accent: #38bdf8;
+  }
+
+  * { @apply border-white/5; }
+
+  html {
+    @apply bg-surface-900 text-slate-200;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply font-sans bg-surface-900 min-h-screen overflow-x-hidden;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(56,189,248,0.04) 0%, transparent 70%);
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-surface-900; }
+  ::-webkit-scrollbar-thumb { @apply bg-surface-500 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-slate-500; }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface-800 border border-white/5 rounded-xl shadow-card;
+  }
+
+  .card-header {
+    @apply px-5 py-4 border-b border-white/5 flex items-center justify-between;
+  }
+
+  .metric-value {
+    @apply font-display font-semibold text-slate-100 tabular-nums;
+  }
+
+  .tag-badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium;
+  }
+
+  /* Thermal status glow rings */
+  .temp-normal { @apply text-gpu-normal; }
+  .temp-warning { @apply text-warn animate-pulse; }
+  .temp-critical { @apply text-danger animate-pulse-fast; }
+
+  /* Animated critical alert */
+  .alert-critical {
+    @apply border border-danger/50 bg-danger/10 rounded-lg;
+    box-shadow: 0 0 20px rgba(244,63,94,0.2), inset 0 0 20px rgba(244,63,94,0.05);
+    animation: criticalPulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes criticalPulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(244,63,94,0.2), inset 0 0 20px rgba(244,63,94,0.05); }
+    50% { box-shadow: 0 0 35px rgba(244,63,94,0.4), inset 0 0 30px rgba(244,63,94,0.1); }
+  }
+
+  .progress-bar {
+    @apply h-1.5 rounded-full bg-surface-600 overflow-hidden;
+  }
+  .progress-fill {
+    @apply h-full rounded-full transition-all duration-700;
+  }
+
+  .btn {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium
+           transition-all duration-150 cursor-pointer select-none;
+  }
+  .btn-primary {
+    @apply btn bg-accent/20 text-accent border border-accent/30
+           hover:bg-accent/30 hover:shadow-glow-accent active:scale-95;
+  }
+  .btn-danger {
+    @apply btn bg-danger/15 text-danger border border-danger/30
+           hover:bg-danger/25 hover:shadow-glow-danger active:scale-95;
+  }
+  .btn-ghost {
+    @apply btn text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent;
+  }
+
+  .status-dot {
+    @apply w-2 h-2 rounded-full flex-shrink-0;
+  }
+  .status-dot-online { @apply status-dot bg-success shadow-[0_0_6px_rgba(16,185,129,0.6)]; }
+  .status-dot-warning { @apply status-dot bg-warn animate-pulse; }
+  .status-dot-offline { @apply status-dot bg-slate-600; }
+  .status-dot-error { @apply status-dot bg-danger animate-ping-slow; }
+}
