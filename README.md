@@ -169,9 +169,17 @@ pip install crypt-r           # Python 3.13+ yescrypt support
 sudo usermod -aG shadow $USER
 exec su -l $USER              # apply without logout
 
-# Sudoers for storage scanning:
-echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/du" | sudo tee /etc/sudoers.d/dilab-du
-sudo chmod 440 /etc/sudoers.d/dilab-du
+# Sudoers for monitoring commands (backend user on dilab2):
+cat << 'EOF' | sudo tee /etc/sudoers.d/dilab-monitor
+# Storage monitoring
+$USER ALL=(ALL) NOPASSWD: /usr/bin/du
+
+# Port monitoring - required for process/user info on all ports
+$USER ALL=(ALL) NOPASSWD: /usr/bin/ss
+$USER ALL=(ALL) NOPASSWD: /usr/bin/netstat
+$USER ALL=(ALL) NOPASSWD: /usr/bin/ps
+EOF
+sudo chmod 440 /etc/sudoers.d/dilab-monitor
 
 # On dilab (node1) — install tools the monitor user will run:
 sudo apt install -y lm-sensors nvidia-utils-535 tmux
@@ -449,7 +457,7 @@ That node will use `child_process.exec` instead of SSH — no `monitor` user nee
 | **Thermal Panels** | Arc gauges per GPU, temp history sparklines, CPU core grid | 5s (WS) |
 | **Storage Panels** | Filesystems with NVMe/SATA distinction, usage bars | 5s (WS) |
 | **SSH Sessions** | Active sessions per node + recent login history | 15s |
-| **Open Ports** | Listening ports with process, PID, user, bind address | 30s |
+| **Open Ports** | Listening ports with process, PID, user, bind address (requires sudo for full info) | 30s |
 | **User Resource Table** | Every researcher's CPU, RAM, VRAM across both nodes | 5s (WS) |
 
 ### Processes & GPU (`/processes`)
@@ -501,12 +509,22 @@ sudo useradd -r -m -s /bin/bash monitor
 
 # Allow specific commands without password:
 cat << 'EOF' | sudo tee /etc/sudoers.d/dilab-monitor
+# System monitoring
 monitor ALL=(ALL) NOPASSWD: /usr/bin/sensors
 monitor ALL=(ALL) NOPASSWD: /usr/bin/du
+
+# Port monitoring - required for process/user info on all ports
+monitor ALL=(ALL) NOPASSWD: /usr/bin/ss
+monitor ALL=(ALL) NOPASSWD: /usr/bin/netstat
+monitor ALL=(ALL) NOPASSWD: /usr/bin/ps
+
+# Process management
 monitor ALL=(ALL) NOPASSWD: /bin/kill
 EOF
 sudo chmod 440 /etc/sudoers.d/dilab-monitor
 ```
+
+**Important:** The port monitoring feature requires `ss`, `netstat`, and `ps` with sudo privileges. Without these, the Open Ports display can only show process/user information for ports owned by the monitor user. With sudo configured, all ports will show actual process names and usernames.
 
 ---
 
@@ -630,3 +648,58 @@ SSH_KEY_PATH=/home/oem/.ssh/id_ed25519
 ```bash
 sudo journalctl -u dilab-monitor -f
 ```
+
+---
+
+## Troubleshooting
+
+### Open Ports showing "unknown" for user/process
+
+**Symptom:** The Open Ports page shows "unknown" in the Process and User columns for most ports.
+
+**Cause:** The monitoring user (or backend user on local node) doesn't have sudo privileges to run `ss`, `ps`, and `netstat`.
+
+**Solution:**
+
+1. **Verify sudo configuration exists:**
+   ```bash
+   # On dilab2 (as the backend user, e.g., oem):
+   sudo -l | grep -E "ss|ps|netstat"
+
+   # On dilab (as monitor user):
+   ssh -p 2222 monitor@dilab.ssu.ac.kr "sudo -l | grep -E 'ss|ps|netstat'"
+   ```
+
+2. **If missing, add sudo permissions:**
+   ```bash
+   # On each node, create/update /etc/sudoers.d/dilab-monitor:
+   sudo visudo -f /etc/sudoers.d/dilab-monitor
+
+   # Add these lines (replace $USER with actual username):
+   <username> ALL=(ALL) NOPASSWD: /usr/bin/ss
+   <username> ALL=(ALL) NOPASSWD: /usr/bin/netstat
+   <username> ALL=(ALL) NOPASSWD: /usr/bin/ps
+   ```
+
+3. **Test sudo commands work without password:**
+   ```bash
+   sudo -n ss -tlnpH | head -3
+   sudo -n ps -o pid=,user= -p 1
+   ```
+
+   Should show output, NOT "sudo: a password is required"
+
+4. **Restart backend** (if running as a service):
+   ```bash
+   sudo systemctl restart dilab-monitor
+   ```
+
+**Expected behavior after fix:**
+- Process column: Shows actual process names (nginx, sshd, redis-server, etc.)
+- PID column: Shows actual process IDs (numbers, not "–")
+- User column: Shows actual usernames (root, www-data, username, etc.)
+
+**Fallback behavior without sudo:**
+- Only ports owned by the monitoring user will show process/user info
+- Ports owned by other users will show "unknown"
+- The system still works, just with limited information

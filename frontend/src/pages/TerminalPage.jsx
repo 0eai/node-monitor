@@ -7,6 +7,7 @@ import {
   Terminal as TerminalIcon, Plus, RefreshCw,
   Server, ChevronDown, Circle, X, Maximize2, Minimize2
 } from 'lucide-react';
+import '@xterm/xterm/css/xterm.css';
 
 // ─── Lazy-load xterm to avoid SSR issues ──────────────────────────────────────
 let Terminal, FitAddon, WebLinksAddon;
@@ -20,12 +21,6 @@ async function loadXterm() {
   Terminal = xterm.Terminal;
   FitAddon = fit.FitAddon;
   WebLinksAddon = links.WebLinksAddon;
-
-  // Load xterm CSS
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = 'https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.css';
-  document.head.appendChild(link);
 }
 
 // ─── Single Terminal Instance ─────────────────────────────────────────────────
@@ -79,7 +74,11 @@ function TerminalPane({ nodeId, sessionName, token, onClose }) {
       cursorBlink: true,
       cursorStyle: 'block',
       scrollback: 5000,
-      allowTransparency: true
+      allowTransparency: true,
+      scrollSensitivity: 1,
+      fastScrollSensitivity: 5,
+      scrollOnUserInput: true,
+      altClickMovesCursor: false
     });
 
     const fitAddon = new FitAddon();
@@ -222,7 +221,7 @@ function TerminalPane({ nodeId, sessionName, token, onClose }) {
   }[status];
 
   return (
-    <div className={`flex flex-col rounded-xl border border-white/8 overflow-hidden bg-[#0f1117]
+    <div className={`flex flex-col rounded-xl border border-white/8 bg-[#0f1117]
       ${isFullscreen ? 'fixed inset-4 z-50 shadow-2xl' : 'h-[520px]'}`}
     >
       {/* Terminal toolbar */}
@@ -256,7 +255,7 @@ function TerminalPane({ nodeId, sessionName, token, onClose }) {
       {/* xterm container */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-hidden p-1"
+        className="flex-1 p-1 overflow-auto"
         style={{ minHeight: 0 }}
         onClick={() => termRef.current?.focus()}
       />

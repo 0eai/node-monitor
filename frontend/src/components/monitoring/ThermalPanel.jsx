@@ -150,10 +150,10 @@ export default function ThermalPanel({ nodeId, nodeData, isMissionCritical = fal
         {cpuTemps?.cores?.length > 0 && (
           <div className="pt-2 border-t border-white/5">
             <div className="text-xs text-slate-500 mb-2 uppercase tracking-wider flex items-center gap-1.5">
-              <Zap size={10} /> CPU Cores
+              <Zap size={10} /> CPU Cores ({cpuTemps.cores.length})
             </div>
-            <div className="grid grid-cols-4 gap-1.5">
-              {cpuTemps.cores.slice(0, 8).map((core, i) => (
+            <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 xl:grid-cols-6 2xl:grid-cols-8 gap-1.5">
+              {cpuTemps.cores.map((core, i) => (
                 <div key={i} className="text-center">
                   <div className={`text-xs font-mono font-semibold ${getThermalColor(core.tempC, 80, 70)}`}>
                     {core.tempC}°

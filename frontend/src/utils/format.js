@@ -18,6 +18,14 @@ export function formatMiBShort(mib) {
   return `${mib}M`;
 }
 
+export function formatBytesPerSec(bytesPerSec) {
+  if (!bytesPerSec || bytesPerSec === 0) return '0 B/s';
+  const k = 1024;
+  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+  const i = Math.floor(Math.log(bytesPerSec) / Math.log(k));
+  return `${parseFloat((bytesPerSec / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
 export function getThermalColor(temp, critical = 85, warning = 75) {
   if (temp === null || temp === undefined) return 'text-slate-500';
   if (temp >= critical) return 'text-danger';

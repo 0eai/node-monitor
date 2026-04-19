@@ -13,6 +13,7 @@ export const THRESHOLDS = {
 };
 
 const gpuUtilHistory = new Map();
+const networkHistory = new Map(); // Store previous network stats for rate calculation
 
 // ─── GPU Metrics ───────────────────────────────────────────────────────────────
 export async function fetchGPUMetrics(nodeId) {
@@ -94,7 +95,7 @@ export async function fetchGPUMetrics(nodeId) {
 // ─── System Metrics ────────────────────────────────────────────────────────────
 export async function fetchSystemMetrics(nodeId) {
   const cmd = `echo "=CPU_USAGE="
-top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1
+top -bn2 -d 0.5 | grep '%Cpu' | tail -1 | awk '{print $2}' | sed 's/us,//g'
 echo "=LOAD_AVG="
 cat /proc/loadavg
 echo "=MEM="
@@ -106,18 +107,20 @@ uptime -p
 echo "=CPU_COUNT="
 nproc
 echo "=HOSTNAME="
-hostname -f`;
+hostname -f
+echo "=NETWORK="
+cat /proc/net/dev | grep -E 'eth0|ens|enp' | head -1 | awk '{print $1,$2,$10}'`;
 
   try {
     const output = await execOnNode(nodeId, cmd);
-    return parseSystemOutput(output);
+    return parseSystemOutput(output, nodeId);
   } catch (err) {
     console.error(`[Monitoring] System metrics failed for ${nodeId}:`, err.message);
     return { error: err.message };
   }
 }
 
-function parseSystemOutput(output) {
+function parseSystemOutput(output, nodeId) {
   const sections = {};
   let current = null;
   for (const line of output.split('\n')) {
@@ -132,6 +135,28 @@ function parseSystemOutput(output) {
   const [swapTotal, swapUsed] = (sections['SWAP']?.[0] || '0 0 0').split(' ').map(Number);
   const loadParts = (sections['LOAD_AVG']?.[0] || '0 0 0').split(' ');
   const memUsedPct = memTotal > 0 ? Math.round((memUsed / memTotal) * 100) : 0;
+
+  // Parse network stats
+  let networkRxBytesPerSec = 0;
+  let networkTxBytesPerSec = 0;
+  if (sections['NETWORK']?.[0]) {
+    const netParts = sections['NETWORK'][0].split(' ');
+    const iface = netParts[0]?.replace(':', '');
+    const rxBytes = parseInt(netParts[1]) || 0;
+    const txBytes = parseInt(netParts[2]) || 0;
+
+    const now = Date.now();
+    const prev = networkHistory.get(nodeId);
+
+    if (prev && (now - prev.timestamp) > 0) {
+      const timeDiffSec = (now - prev.timestamp) / 1000;
+      networkRxBytesPerSec = Math.max(0, (rxBytes - prev.rxBytes) / timeDiffSec);
+      networkTxBytesPerSec = Math.max(0, (txBytes - prev.txBytes) / timeDiffSec);
+    }
+
+    networkHistory.set(nodeId, { rxBytes, txBytes, timestamp: now, iface });
+  }
+
   return {
     cpuUsagePct: parseFloat(sections['CPU_USAGE']?.[0] || '0'),
     loadAvg1: parseFloat(loadParts[0]) || 0,
@@ -147,6 +172,8 @@ function parseSystemOutput(output) {
     uptime: sections['UPTIME']?.[0] || 'unknown',
     cpuCount: parseInt(sections['CPU_COUNT']?.[0] || '0'),
     hostname: sections['HOSTNAME']?.[0] || 'unknown',
+    networkRxBytesPerSec,
+    networkTxBytesPerSec,
     memStatus: memUsedPct >= THRESHOLDS.RAM_CRITICAL ? 'critical' :
                memUsedPct >= THRESHOLDS.RAM_WARNING  ? 'warning' : 'normal'
   };
@@ -352,7 +379,7 @@ export async function fetchFullNodeSnapshot(nodeId) {
       fetchStorageMetrics(nodeId),
       fetchUserResourceUsage(nodeId),
       fetchHeavyProcesses(nodeId),
-      fetchOpenPorts(nodeId),
+      fetchOpenPortsEnriched(nodeId),
       fetchSSHSessions(nodeId)
     ]);
 
@@ -371,7 +398,7 @@ export async function fetchFullNodeSnapshot(nodeId) {
   const usersWithVram = userData.users.map(u => ({ ...u, vramMiB: userVramMap[u.user] || 0 }));
 
   const sysData    = system.status    === 'fulfilled' ? system.value    : { error: system.reason?.message };
-  const portsData  = ports.status     === 'fulfilled' ? ports.value     : [];
+  const portsData  = ports.status     === 'fulfilled' ? ports.value     : { ports: [], error: ports.reason?.message };
   const sshData    = sshSessions.status === 'fulfilled' ? sshSessions.value : [];
 
   const alerts = generateAlerts(nodeId, gpuData.gpus, sysData);
@@ -427,18 +454,25 @@ function generateAlerts(nodeId, gpus, system) {
 // ─── Open Ports ────────────────────────────────────────────────────────────────
 
 export async function fetchOpenPorts(nodeId) {
-  const cmd = `ss -tlnpH 2>/dev/null | awk '{print $1,$4,$6}' | head -60`;
+  const cmd = `sudo -n ss -tlnpH 2>/dev/null | awk '{print $1,$4,$6}' | head -60`;
   try {
     const output = await execOnNode(nodeId, cmd);
     return { ports: parseOpenPorts(output) };
   } catch (err) {
-    // fallback to netstat
+    // fallback to netstat with sudo
     try {
       const out2 = await execOnNode(nodeId,
-        `netstat -tlnp 2>/dev/null | tail -n+3 | awk '{print $1,$4,$7}' | head -60`);
+        `sudo -n netstat -tlnp 2>/dev/null | tail -n+3 | awk '{print $1,$4,$7}' | head -60`);
       return { ports: parseNetstatPorts(out2) };
     } catch {
-      return { ports: [], error: err.message };
+      // final fallback: try without sudo (will only show user's own processes)
+      try {
+        const out3 = await execOnNode(nodeId,
+          `ss -tlnpH 2>/dev/null | awk '{print $1,$4,$6}' | head -60`);
+        return { ports: parseOpenPorts(out3) };
+      } catch {
+        return { ports: [], error: err.message };
+      }
     }
   }
 }
@@ -451,8 +485,17 @@ export async function fetchOpenPortsEnriched(nodeId) {
   try {
     const pids = result.ports.filter(p => p.pid).map(p => p.pid).join(',');
     if (pids) {
-      const psOut = await execOnNode(nodeId,
-        `ps -o pid=,user= -p ${pids} 2>/dev/null`, 5000);
+      // Try with sudo first, fallback to regular ps
+      let psCmd = `sudo -n ps -o pid=,user= -p ${pids} 2>/dev/null`;
+      let psOut;
+      try {
+        psOut = await execOnNode(nodeId, psCmd, 5000);
+      } catch {
+        // Fallback: try without sudo
+        psCmd = `ps -o pid=,user= -p ${pids} 2>/dev/null`;
+        psOut = await execOnNode(nodeId, psCmd, 5000);
+      }
+
       const pidUserMap = {};
       for (const line of psOut.split('\n').filter(Boolean)) {
         const parts = line.trim().split(/\s+/);
@@ -460,10 +503,12 @@ export async function fetchOpenPortsEnriched(nodeId) {
       }
       result.ports = result.ports.map(p => ({
         ...p,
-        user: (p.pid && pidUserMap[p.pid]) || p.user || '—'
+        user: (p.pid && pidUserMap[p.pid]) || p.user || 'unknown'
       }));
     }
-  } catch {}
+  } catch (err) {
+    console.error(`[Ports] Failed to enrich user info for ${nodeId}:`, err.message);
+  }
 
   return result;
 }
@@ -480,9 +525,9 @@ function parseOpenPorts(output) {
     const isLocal = addrFull.startsWith('127.') || addrFull.startsWith('[::1]');
     ports.push({
       port,
-      process: procMatch?.[1] || '—',
+      process: procMatch?.[1] || 'unknown',
       pid: procMatch ? parseInt(procMatch[2]) : null,
-      user: '—',
+      user: 'unknown',
       address: addrFull,
       isLocal,
       protocol: 'tcp'
@@ -502,8 +547,8 @@ function parseNetstatPorts(output) {
     ports.push({
       port: parseInt(addrMatch[1]),
       pid: parseInt(procParts?.[0]) || null,
-      process: procParts?.[1] || '—',
-      user: '—',
+      process: procParts?.[1] || 'unknown',
+      user: 'unknown',
       address: parts[1],
       isLocal: parts[1]?.startsWith('127.'),
       protocol: 'tcp'

@@ -36,6 +36,26 @@
   ::-webkit-scrollbar-thumb:hover { @apply bg-slate-500; }
 }
 
+/* Xterm terminal scrollbar - must be outside @layer base */
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 12px !important;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-track {
+  background: #161b27 !important;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #243347 !important;
+  border-radius: 4px !important;
+  border: 2px solid transparent !important;
+  background-clip: padding-box !important;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #475569 !important;
+}
+
 @layer components {
   .card {
     @apply bg-surface-800 border border-white/5 rounded-xl shadow-card;
