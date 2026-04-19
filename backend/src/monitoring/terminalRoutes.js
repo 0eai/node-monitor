@@ -6,11 +6,11 @@ const LOCAL_NODE_ID = process.env.NODE_LOCAL_ID || 'node2';
 
 const NODE_CONFIG = {
   node1: {
-    host: process.env.NODE1_HOST || 'dilab.ssu.ac.kr',
+    host: process.env.NODE1_HOST || 'node1.example.com',
     port: parseInt(process.env.NODE1_SSH_PORT || '22'),
   },
   node2: {
-    host: process.env.NODE2_HOST || 'dilab2.ssghu.ac.kr',
+    host: process.env.NODE2_HOST || 'node2.example.com',
     port: parseInt(process.env.NODE2_SSH_PORT || '22'),
   }
 };

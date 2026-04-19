@@ -155,7 +155,31 @@ Thumbs.db
 .idea/
 
 trash/
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SECURITY: Deployment-specific files (contain sensitive information)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Generated configuration files (may contain real domains, paths, secrets)
 nginx.conf
-deploy.sh
-QUICK_START.md
+*.service
+.setup-config
+
+# Deployment-specific documentation (may contain your server info)
 CURRENT_DEPLOYMENT.md
+
+# SSH keys (never commit these!)
+*.key
+*.pem
+*_rsa
+*_rsa.pub
+*_ed25519
+*_ed25519.pub
+id_*
+!id_example
+
+# Backup files that might contain secrets
+*.bak
+*.backup
+*.old
+*~

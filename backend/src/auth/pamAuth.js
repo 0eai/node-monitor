@@ -34,9 +34,9 @@ export async function authenticateSystemUser(username, password) {
   // User not local — try remote nodes via sshpass
   const remoteNodes = [
     {
-      host: process.env.NODE1_HOST || 'dilab.ssu.ac.kr',
-      port: process.env.NODE1_SSH_PORT || '2222',
-      label: 'dilab (Node 1)'
+      host: process.env.NODE1_HOST || 'node1.example.com',
+      port: process.env.NODE1_SSH_PORT || '22',
+      label: process.env.NODE1_LABEL || 'Node 1'
     }
   ];
 
